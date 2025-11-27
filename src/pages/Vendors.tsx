@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/client";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Search, Star, MapPin, DollarSign } from "lucide-react";
+import { ArrowLeft, Search, Star, MapPin, DollarSign, Send } from "lucide-react";
 import { toast } from "sonner";
 
 interface Vendor {
@@ -20,6 +23,11 @@ interface Vendor {
   price_range: string | null;
 }
 
+interface Event {
+  id: string;
+  title: string;
+}
+
 const Vendors = () => {
   const navigate = useNavigate();
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -28,6 +36,38 @@ const Vendors = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [priceFilter, setPriceFilter] = useState<string>("all");
+
+  // Inquiry dialog state
+  const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
+  const [isInquiryDialogOpen, setIsInquiryDialogOpen] = useState(false);
+  const [selectedEventId, setSelectedEventId] = useState<string>("");
+  const [inquiryMessage, setInquiryMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Get current user
+  const { data: user } = useQuery({
+    queryKey: ["user"],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      return user;
+    },
+  });
+
+  // Get user's events for the inquiry form
+  const { data: userEvents } = useQuery<Event[]>({
+    queryKey: ["userEvents", user?.id],
+    enabled: !!user?.id && isInquiryDialogOpen,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("events")
+        .select("id, title")
+        .eq("couple_id", user?.id)
+        .order("event_date", { ascending: true });
+
+      if (error) throw error;
+      return data || [];
+    },
+  });
 
   useEffect(() => {
     fetchVendors();
@@ -61,6 +101,7 @@ const Vendors = () => {
       const { data, error } = await supabase
         .from("vendors")
         .select("*")
+        .eq("approval_status", "approved")
         .order("rating", { ascending: false, nullsFirst: false });
 
       if (error) throw error;
@@ -73,13 +114,62 @@ const Vendors = () => {
     }
   };
 
+  const handleVendorClick = (vendor: Vendor) => {
+    setSelectedVendor(vendor);
+    setIsInquiryDialogOpen(true);
+    setInquiryMessage("");
+    setSelectedEventId("");
+  };
+
+  const handleSendInquiry = async () => {
+    if (!selectedEventId) {
+      toast.error("Please select an event");
+      return;
+    }
+
+    if (!inquiryMessage.trim()) {
+      toast.error("Please enter a message");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const { error } = await supabase
+        .from("vendor_inquiries")
+        .insert({
+          vendor_id: selectedVendor?.id,
+          event_id: selectedEventId,
+          inquirer_id: user?.id,
+          message: inquiryMessage.trim(),
+          status: "pending",
+        });
+
+      if (error) throw error;
+
+      toast.success(`Inquiry sent to ${selectedVendor?.business_name}!`);
+      setIsInquiryDialogOpen(false);
+      setSelectedVendor(null);
+      setInquiryMessage("");
+      setSelectedEventId("");
+    } catch (error) {
+      console.error("Error sending inquiry:", error);
+      toast.error("Failed to send inquiry. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const getCategoryBadgeColor = (category: string) => {
     const colors: { [key: string]: string } = {
       catering: "bg-orange-500/10 text-orange-500 border-orange-500/20",
       decoration: "bg-pink-500/10 text-pink-500 border-pink-500/20",
       photography: "bg-blue-500/10 text-blue-500 border-blue-500/20",
-      entertainment: "bg-purple-500/10 text-purple-500 border-purple-500/20",
-      cultural_performance: "bg-green-500/10 text-green-500 border-green-500/20",
+      videography: "bg-purple-500/10 text-purple-500 border-purple-500/20",
+      entertainment: "bg-green-500/10 text-green-500 border-green-500/20",
+      cultural_performers: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
+      florist: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
+      makeup_artist: "bg-rose-500/10 text-rose-500 border-rose-500/20",
     };
     return colors[category] || "bg-gray-500/10 text-gray-500 border-gray-500/20";
   };
@@ -129,8 +219,11 @@ const Vendors = () => {
                     <SelectItem value="catering">Catering</SelectItem>
                     <SelectItem value="decoration">Decoration</SelectItem>
                     <SelectItem value="photography">Photography</SelectItem>
+                    <SelectItem value="videography">Videography</SelectItem>
                     <SelectItem value="entertainment">Entertainment</SelectItem>
-                    <SelectItem value="cultural_performance">Cultural Performance</SelectItem>
+                    <SelectItem value="cultural_performers">Cultural Performers</SelectItem>
+                    <SelectItem value="florist">Florist</SelectItem>
+                    <SelectItem value="makeup_artist">Makeup Artist</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -176,7 +269,7 @@ const Vendors = () => {
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredVendors.map((vendor) => (
-              <Card key={vendor.id} className="hover:shadow-lg transition-shadow cursor-pointer">
+              <Card key={vendor.id} className="hover:shadow-lg transition-shadow">
                 <CardHeader>
                   <div className="flex justify-between items-start mb-2">
                     <CardTitle className="text-xl font-serif">{vendor.business_name}</CardTitle>
@@ -214,8 +307,13 @@ const Vendors = () => {
                       </div>
                     )}
                   </div>
-                  <Button className="w-full" variant="outline">
-                    View Details
+                  <Button
+                    className="w-full"
+                    onClick={() => handleVendorClick(vendor)}
+                    disabled={!user}
+                  >
+                    <Send className="w-4 h-4 mr-2" />
+                    Send Inquiry
                   </Button>
                 </CardContent>
               </Card>
@@ -223,6 +321,66 @@ const Vendors = () => {
           </div>
         )}
       </div>
+
+      {/* Inquiry Dialog */}
+      <Dialog open={isInquiryDialogOpen} onOpenChange={setIsInquiryDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Send Inquiry to {selectedVendor?.business_name}</DialogTitle>
+            <DialogDescription>
+              Select an event and write a message to this vendor
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Select Event</label>
+              <Select value={selectedEventId} onValueChange={setSelectedEventId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose an event..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {userEvents && userEvents.length > 0 ? (
+                    userEvents.map((event) => (
+                      <SelectItem key={event.id} value={event.id}>
+                        {event.title}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="no-events" disabled>
+                      No events found. Create an event first.
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Your Message</label>
+              <Textarea
+                placeholder="Tell the vendor about your event and what you're looking for..."
+                value={inquiryMessage}
+                onChange={(e) => setInquiryMessage(e.target.value)}
+                rows={5}
+                className="resize-none"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsInquiryDialogOpen(false)}
+              disabled={isSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSendInquiry}
+              disabled={isSubmitting || !selectedEventId || !inquiryMessage.trim()}
+            >
+              {isSubmitting ? "Sending..." : "Send Inquiry"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

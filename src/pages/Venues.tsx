@@ -1,13 +1,20 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/client";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Search, Star, MapPin, Users, DollarSign } from "lucide-react";
+import { ArrowLeft, Search, Star, MapPin, Users, DollarSign, CalendarIcon, Send } from "lucide-react";
 import { toast } from "sonner";
+import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
 interface Venue {
   id: string;
@@ -21,6 +28,13 @@ interface Venue {
   amenities: string[] | null;
 }
 
+interface Event {
+  id: string;
+  title: string;
+  event_date: string;
+  guest_count: number | null;
+}
+
 const Venues = () => {
   const navigate = useNavigate();
   const [venues, setVenues] = useState<Venue[]>([]);
@@ -28,6 +42,40 @@ const Venues = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [capacityFilter, setCapacityFilter] = useState<string>("all");
+
+  // Booking dialog state
+  const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null);
+  const [isBookingDialogOpen, setIsBookingDialogOpen] = useState(false);
+  const [selectedEventId, setSelectedEventId] = useState<string>("");
+  const [bookingDate, setBookingDate] = useState<Date>();
+  const [guestCount, setGuestCount] = useState<string>("");
+  const [bookingMessage, setBookingMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Get current user
+  const { data: user } = useQuery({
+    queryKey: ["user"],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      return user;
+    },
+  });
+
+  // Get user's events for the booking form
+  const { data: userEvents } = useQuery<Event[]>({
+    queryKey: ["userEvents", user?.id],
+    enabled: !!user?.id && isBookingDialogOpen,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("events")
+        .select("id, title, event_date, guest_count")
+        .eq("couple_id", user?.id)
+        .order("event_date", { ascending: true });
+
+      if (error) throw error;
+      return data || [];
+    },
+  });
 
   useEffect(() => {
     fetchVenues();
@@ -66,6 +114,7 @@ const Venues = () => {
       const { data, error } = await supabase
         .from("venues")
         .select("*")
+        .eq("approval_status", "approved")
         .order("rating", { ascending: false, nullsFirst: false });
 
       if (error) throw error;
@@ -75,6 +124,75 @@ const Venues = () => {
       toast.error("Failed to load venues");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleVenueClick = (venue: Venue) => {
+    setSelectedVenue(venue);
+    setIsBookingDialogOpen(true);
+    setBookingMessage("");
+    setSelectedEventId("");
+    setBookingDate(undefined);
+    setGuestCount("");
+  };
+
+  // Auto-fill date and guest count when event is selected
+  const handleEventSelect = (eventId: string) => {
+    setSelectedEventId(eventId);
+    const event = userEvents?.find(e => e.id === eventId);
+    if (event) {
+      setBookingDate(new Date(event.event_date));
+      if (event.guest_count) {
+        setGuestCount(event.guest_count.toString());
+      }
+    }
+  };
+
+  const handleSendBookingRequest = async () => {
+    if (!selectedEventId) {
+      toast.error("Please select an event");
+      return;
+    }
+
+    if (!bookingDate) {
+      toast.error("Please select a booking date");
+      return;
+    }
+
+    if (!guestCount || parseInt(guestCount) <= 0) {
+      toast.error("Please enter a valid guest count");
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const { error } = await supabase
+        .from("booking_requests")
+        .insert({
+          venue_id: selectedVenue?.id,
+          event_id: selectedEventId,
+          requester_id: user?.id,
+          request_date: format(bookingDate, "yyyy-MM-dd"),
+          guest_count: parseInt(guestCount),
+          message: bookingMessage.trim() || null,
+          status: "pending",
+        });
+
+      if (error) throw error;
+
+      toast.success(`Booking request sent to ${selectedVenue?.name}!`);
+      setIsBookingDialogOpen(false);
+      setSelectedVenue(null);
+      setBookingMessage("");
+      setSelectedEventId("");
+      setBookingDate(undefined);
+      setGuestCount("");
+    } catch (error) {
+      console.error("Error sending booking request:", error);
+      toast.error("Failed to send booking request. Please try again.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -152,7 +270,7 @@ const Venues = () => {
         ) : (
           <div className="grid md:grid-cols-2 gap-6">
             {filteredVenues.map((venue) => (
-              <Card key={venue.id} className="hover:shadow-lg transition-shadow cursor-pointer">
+              <Card key={venue.id} className="hover:shadow-lg transition-shadow">
                 <CardHeader>
                   <CardTitle className="text-2xl font-serif">{venue.name}</CardTitle>
                   <div className="flex items-center gap-4 text-sm">
@@ -210,13 +328,119 @@ const Venues = () => {
                     </div>
                   )}
 
-                  <Button className="w-full">Request Booking</Button>
+                  <Button
+                    className="w-full"
+                    onClick={() => handleVenueClick(venue)}
+                    disabled={!user}
+                  >
+                    <Send className="w-4 h-4 mr-2" />
+                    Request Booking
+                  </Button>
                 </CardContent>
               </Card>
             ))}
           </div>
         )}
       </div>
+
+      {/* Booking Request Dialog */}
+      <Dialog open={isBookingDialogOpen} onOpenChange={setIsBookingDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Request Booking at {selectedVenue?.name}</DialogTitle>
+            <DialogDescription>
+              Select an event and provide booking details
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Select Event</label>
+              <Select value={selectedEventId} onValueChange={handleEventSelect}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose an event..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {userEvents && userEvents.length > 0 ? (
+                    userEvents.map((event) => (
+                      <SelectItem key={event.id} value={event.id}>
+                        {event.title} - {format(new Date(event.event_date), "MMM d, yyyy")}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="no-events" disabled>
+                      No events found. Create an event first.
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Booking Date</label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !bookingDate && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {bookingDate ? format(bookingDate, "PPP") : "Pick a date"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0">
+                  <Calendar
+                    mode="single"
+                    selected={bookingDate}
+                    onSelect={setBookingDate}
+                    initialFocus
+                    disabled={(date) => date < new Date()}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Guest Count</label>
+              <Input
+                type="number"
+                placeholder="Expected number of guests"
+                value={guestCount}
+                onChange={(e) => setGuestCount(e.target.value)}
+                min="1"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Message (Optional)</label>
+              <Textarea
+                placeholder="Any special requirements or questions..."
+                value={bookingMessage}
+                onChange={(e) => setBookingMessage(e.target.value)}
+                rows={3}
+                className="resize-none"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsBookingDialogOpen(false)}
+              disabled={isSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSendBookingRequest}
+              disabled={isSubmitting || !selectedEventId || !bookingDate || !guestCount}
+            >
+              {isSubmitting ? "Sending..." : "Send Request"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
