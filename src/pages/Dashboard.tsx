@@ -1,34 +1,74 @@
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/client";
+import { User } from "@supabase/supabase-js";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Calendar, Users, MapPin, TrendingUp, LogOut, Heart } from "lucide-react";
 
+
 const Dashboard = () => {
   const navigate = useNavigate();
+  const [user, setUser] = useState<User | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const { data: user, isLoading: isUserLoading } = useQuery({
-    queryKey: ["user"],
-    queryFn: async () => {
+  const checkUser = useCallback (async () => {
+    try {
       const { data: { user } } = await supabase.auth.getUser();
-      return user;
-    },
-  });
+      
+      if (!user) {
+        navigate("/auth");
+        return;
+      }
 
-  const { data: userRole, isLoading: isRoleLoading } = useQuery({
-    queryKey: ["userRole", user?.id],
-    enabled: !!user?.id,
-    queryFn: async () => {
-      const { data } = await supabase
+      setUser(user);
+
+      // Get user role
+      const { data: roleData } = await supabase
         .from("user_roles")
         .select("role")
-        .eq("user_id", user?.id)
+        .eq("user_id", user.id)
         .single();
-      return data?.role;
-    },
-  });
+
+      if (roleData) {
+        setUserRole(roleData.role);
+        
+        // Redirect admins to their specific dashboard
+        if (roleData.role === "admin") {
+          navigate("/admin");
+          return;
+        }
+        
+        // Redirect venue managers to their specific dashboard
+        if (roleData.role === "venue_manager") {
+          navigate("/venue-manager");
+          return;
+        }
+        
+        // Redirect vendors to their specific dashboard
+        if (roleData.role === "vendor") {
+          navigate("/vendor");
+          return;
+        }
+        
+        // Redirect planners to their specific dashboard
+        if (roleData.role === "planner") {
+          navigate("/planner");
+          return;
+        }
+      }
+    } catch (error) {
+      console.error("Error checking user:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, [navigate]);
+
+useEffect (() => {
+    checkUser();
+  }, [checkUser]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -36,7 +76,27 @@ const Dashboard = () => {
     navigate("/");
   };
 
-  if (isUserLoading || isRoleLoading) {
+  const handleRoleSwitch = async (newRole: "couple" | "planner" | "vendor" | "venue_manager" | "admin") => {
+    if (!user) return;
+    
+    try {
+      const { error } = await supabase
+        .from("user_roles")
+        .update({ role: newRole })
+        .eq("user_id", user.id);
+
+      if (error) throw error;
+
+      toast.success(`Role switched to ${newRole}`);
+      // Refresh to redirect to appropriate dashboard
+      window.location.reload();
+    } catch (error) {
+      console.error("Error switching role:", error);
+      toast.error("Failed to switch role");
+    }
+  };
+
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
@@ -47,7 +107,7 @@ const Dashboard = () => {
     );
   }
 
-  const getRoleName = (role: string | undefined) => {
+  const getRoleName = (role: string | null) => {
     if (!role) return "User";
     return role.split("_").map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
   };
@@ -72,9 +132,57 @@ const Dashboard = () => {
           <h2 className="text-3xl font-serif font-bold mb-2">
             Welcome back, {user?.user_metadata?.full_name || "User"}!
           </h2>
-          <p className="text-muted-foreground">
+          <p className="text-muted-foreground mb-4">
             Role: <span className="font-medium text-foreground">{getRoleName(userRole)}</span>
           </p>
+          
+        
+          {/* Demo Role Switcher */}
+          <Card className="max-w-2xl border-dashed border-2 border-primary/20 bg-primary/5">
+            <CardHeader>
+              <CardTitle className="text-sm">🎭 Demo Mode - Switch Roles</CardTitle>
+              <CardDescription className="text-xs">
+                Quickly switch between roles to test different dashboards
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant={userRole === "couple" ? "default" : "outline"}
+                onClick={() => handleRoleSwitch("couple")}
+              >
+                Couple
+              </Button>
+              <Button
+                size="sm"
+                variant={userRole === "planner" ? "default" : "outline"}
+                onClick={() => handleRoleSwitch("planner")}
+              >
+                Planner
+              </Button>
+              <Button
+                size="sm"
+                variant={userRole === "vendor" ? "default" : "outline"}
+                onClick={() => handleRoleSwitch("vendor")}
+              >
+                Vendor
+              </Button>
+              <Button
+                size="sm"
+                variant={userRole === "venue_manager" ? "default" : "outline"}
+                onClick={() => handleRoleSwitch("venue_manager")}
+              >
+                Venue Manager
+              </Button>
+              <Button
+                size="sm"
+                variant={userRole === "admin" ? "default" : "outline"}
+                onClick={() => handleRoleSwitch("admin")}
+              >
+                Admin
+              </Button>
+            </CardContent>
+          </Card>
         </div>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">

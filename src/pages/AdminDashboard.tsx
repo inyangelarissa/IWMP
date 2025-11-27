@@ -9,8 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Users, TrendingUp, CheckCircle, XCircle, Building, Store, Calendar, MessageSquare } from "lucide-react";
-import type { User as SupabaseUser } from "@supabase/supabase-js";
+import { Users, TrendingUp, CheckCircle, XCircle, Building, Store, Calendar, MessageSquare, LogOut, Heart } from "lucide-react";
+import { User as SupabaseUser } from "@supabase/supabase-js";
 
 interface User {
   id: string;
@@ -69,18 +69,6 @@ export default function AdminDashboard() {
     activeBookings: 0,
   });
   const [rejectionReason, setRejectionReason] = useState<{ [key: string]: string }>({});
-
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      setUser(session?.user ?? null);
-    });
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
 
   const fetchUsers = useCallback(async () => {
     const { data: profiles, error: profilesError } = await supabase
@@ -197,6 +185,18 @@ export default function AdminDashboard() {
   }, [user, navigate, fetchAllData]);
 
   useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
     if (user) {
       checkAdminStatus();
     }
@@ -284,11 +284,30 @@ export default function AdminDashboard() {
     );
   }
 
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    toast.success("Logged out successfully");
+    navigate("/");
+  };
+
   return (
     <div className="min-h-screen bg-background">
+      <nav className="border-b bg-card/50 backdrop-blur-sm">
+        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <Heart className="w-8 h-8 text-primary fill-primary" />
+            <h1 className="text-2xl font-serif font-bold">IWEMS - Admin</h1>
+          </div>
+          <Button variant="outline" onClick={handleLogout}>
+            <LogOut className="w-4 h-4 mr-2" />
+            Logout
+          </Button>
+        </div>
+      </nav>
+
       <div className="container mx-auto p-8">
         <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-2">Admin Dashboard</h1>
+          <h2 className="text-3xl font-serif font-bold mb-2">Admin Dashboard</h2>
           <p className="text-muted-foreground">Manage users, vendors, venues, and platform analytics</p>
         </div>
 
