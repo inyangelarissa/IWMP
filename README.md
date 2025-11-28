@@ -4,7 +4,7 @@ My project is called "Wedplanner App" , Designed for the help people who are abo
 
 ## Project info
 
-**URL**: https://top1-wedding-planner.vercel.app/
+**URL**: https://wedding-planner-6lzrj2xsj-linyange-5818s-projects.vercel.app/
 
 **Use your preferred IDE**
 
@@ -40,6 +40,6 @@ This project is built with:
 
 ## How can to access the deployed version of this project?
 
-Simply open https://top1-wedding-planner.vercel.app/
+Simply open https://wedding-planner-6lzrj2xsj-linyange-5818s-projects.vercel.app/
 
 
