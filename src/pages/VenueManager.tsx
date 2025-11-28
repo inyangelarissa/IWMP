@@ -90,6 +90,21 @@ const VenueManagerDashboard = () => {
     }
   };
 
+  useEffect(() => {
+    checkUser();
+  }, []);
+
+  useEffect(() => {
+    if (user) {
+      fetchVenues();
+      fetchBookingRequests();
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (selectedVenueForCalendar) fetchVenueAvailability();
+  }, [selectedVenueForCalendar]);
+
   const fetchVenues = async () => {
     if (!user) return;
 

@@ -43,6 +43,7 @@ const Vendors = () => {
   const [selectedEventId, setSelectedEventId] = useState<string>("");
   const [inquiryMessage, setInquiryMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
 
   // Get current user
   const { data: user } = useQuery({
@@ -120,6 +121,8 @@ const Vendors = () => {
     setInquiryMessage("");
     setSelectedEventId("");
   };
+
+  
 
   const handleSendInquiry = async () => {
     if (!selectedEventId) {
@@ -315,6 +318,7 @@ const Vendors = () => {
                     <Send className="w-4 h-4 mr-2" />
                     Send Inquiry
                   </Button>
+                  
                 </CardContent>
               </Card>
             ))}
@@ -381,6 +385,8 @@ const Vendors = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      
     </div>
   );
 };

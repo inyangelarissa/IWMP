@@ -6,7 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Calendar, Users, DollarSign, MapPin, LogOut, CheckCircle, XCircle } from "lucide-react";
+import { Calendar, Users, DollarSign, MapPin, LogOut, CheckCircle, Heart } from "lucide-react";
+
+
 
 interface Event {
   id: string;
@@ -53,6 +55,8 @@ const PlannerDashboard = () => {
     totalClients: 0,
     totalBudget: 0,
   });
+
+  
 
   const loadEvents = useCallback(async (userId: string) => {
     const { data, error } = await supabase
@@ -184,17 +188,22 @@ const PlannerDashboard = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b border-border bg-card">
+      <nav className="border-b bg-card/50 backdrop-blur-sm">
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-foreground">Wedding Planner Dashboard</h1>
-          <Button onClick={handleSignOut} variant="outline">
+          <div className="flex items-center gap-2">
+            <Heart className="w-8 h-8 text-primary fill-primary" />
+            <h1 className="text-2xl font-serif font-bold">IWEMS - Planner</h1>
+          </div>
+          <Button variant="outline" onClick={handleSignOut}>
             <LogOut className="w-4 h-4 mr-2" />
-            Sign Out
+            Logout
           </Button>
         </div>
-      </header>
+      </nav>
 
       <main className="container mx-auto px-4 py-8">
+        
+
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

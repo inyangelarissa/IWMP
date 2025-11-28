@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/client";
 import { User } from "@supabase/supabase-js";
@@ -67,7 +68,7 @@ const Dashboard = () => {
         
         // Redirect vendors to their specific dashboard
         if (roleData.role === "vendor") {
-          navigate("/vendor");
+          navigate("/vendor-dashboard");
           return;
         }
         
@@ -159,7 +160,7 @@ useEffect (() => {
         .limit(3);
 
       if (inquiries) {
-        inquiries.forEach((inquiry: any) => {
+        inquiries.forEach((inquiry) => {
           allActivities.push({
             id: inquiry.id,
             type: "vendor_inquiry",
@@ -180,7 +181,7 @@ useEffect (() => {
         .limit(3);
 
       if (bookings) {
-        bookings.forEach((booking: any) => {
+        bookings.forEach((booking) => {
           allActivities.push({
             id: booking.id,
             type: "booking_request",

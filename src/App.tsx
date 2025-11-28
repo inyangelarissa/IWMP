@@ -27,6 +27,7 @@ function App() {
       <Route path="/admin" element={<AdminDashboard />} />
       <Route path="/planner" element={<PlannerDashboard />} />
       <Route path="/venue-manager" element={<VenueManagerDashboard />} />
+      <Route path="/vendor-dashboard" element={<VendorDashboard />} />
       <Route path="/budget" element={<BudgetTracker />} />
       <Route path="/cultural" element={<CulturalActivities />} />
       <Route path="*" element={<NotFound />} />
